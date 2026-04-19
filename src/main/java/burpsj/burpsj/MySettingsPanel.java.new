@@ -1,0 +1,303 @@
+
+    private void toggleSaving() {
+        savingEnabled = toggleBtn.isSelected();
+        toggleBtn.setText(savingEnabled ? "▶️ Captura: ON" : "⏸️ Captura: OFF");
+        toggleBtn.setBackground(savingEnabled ? new Color(76, 175, 80) : new Color(244, 67, 54));
+        if (api != null) {
+            api.logging().logToOutput("[CAPTURA] " + (savingEnabled ? "Habilitada" : "Deshabilitada"));
+        }
+    }
+
+    private void toggleAutoDetect() {
+        autoDetectEnabled = autoDetectBtn.isSelected();
+        autoDetectBtn.setText(autoDetectEnabled ? "🔮 Auto-detectar: ON" : "🔮 Auto-detectar: OFF");
+        if (api != null) {
+            api.logging().logToOutput("[AUTO-DETECT] " + (autoDetectEnabled ? "Habilitado" : "Deshabilitado"));
+        }
+    }
+
+    private void toggleSourceMaps() {
+        downloadSourceMaps = sourceMapBtn.isSelected();
+        sourceMapBtn.setText(downloadSourceMaps ? "🗺️ Source Maps: ON" : "🗺️ Source Maps: OFF");
+    }
+
+    public boolean isSavingEnabled() { return savingEnabled; }
+    public boolean isAutoDetectEnabled() { return autoDetectEnabled; }
+    public boolean isSourceMapsEnabled() { return downloadSourceMaps; }
+
+    private void addFilterFromField() {
+        String text = filterField.getText().trim();
+        if (text.isEmpty()) return;
+        
+        String[] words = text.split(",");
+        for (String word : words) {
+            String trimmed = word.trim().toLowerCase();
+            if (!trimmed.isEmpty() && !filterWords.contains(trimmed)) {
+                filterWords.add(trimmed);
+                addFilterTag(trimmed);
+            }
+        }
+        filterField.setText("");
+        statusLabel.setText("Filtros: " + filterWords.size());
+    }
+
+    private void addFilterTag(String word) {
+        JPanel tagPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
+        tagPanel.setOpaque(true);
+        tagPanel.setBackground(new Color(30, 136, 229));
+        tagPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(21, 101, 192), 1, true),
+            BorderFactory.createEmptyBorder(4, 10, 4, 8)
+        ));
+        
+        JLabel wordLabel = new JLabel(word);
+        wordLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        wordLabel.setForeground(Color.WHITE);
+        
+        JButton removeBtn = new JButton("×");
+        removeBtn.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        removeBtn.setForeground(new Color(255, 200, 200));
+        removeBtn.setBackground(new Color(30, 136, 229));
+        removeBtn.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
+        removeBtn.setContentAreaFilled(false);
+        removeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        removeBtn.setToolTipText("Eliminar: " + word);
+        removeBtn.addActionListener(e -> removeFilter(word, tagPanel));
+        
+        tagPanel.add(wordLabel);
+        tagPanel.add(removeBtn);
+        
+        filterTagsPanel.add(tagPanel);
+        filterTagsPanel.revalidate();
+        filterTagsPanel.repaint();
+    }
+
+    private void removeFilter(String word, JPanel tagPanel) {
+        filterWords.remove(word);
+        filterTagsPanel.remove(tagPanel);
+        filterTagsPanel.revalidate();
+        filterTagsPanel.repaint();
+        statusLabel.setText("Filtros: " + filterWords.size());
+    }
+
+    private void clearAllFilters() {
+        filterWords.clear();
+        filterTagsPanel.removeAll();
+        filterTagsPanel.revalidate();
+        filterTagsPanel.repaint();
+        statusLabel.setText("Filtros: Ninguno");
+    }
+
+    public void addFileEntry(String fileName, String url, String content, long size, 
+                             List<SecretDetector.Finding> findings, List<String> endpoints) {
+        SwingUtilities.invokeLater(() -> {
+            // Verificar duplicados
+            for (int i = 0; i < filesModel.getRowCount(); i++) {
+                if (filesModel.getValueAt(i, 1).equals(url)) return;
+            }
+            
+            String severity = findings.isEmpty() ? "-" : findings.get(0).severity.toString();
+            int criticalCount = 0;
+            for (SecretDetector.Finding f : findings) {
+                if (f.severity == SecretDetector.Severity.CRITICAL) criticalCount++;
+            }
+            
+            String findingSummary = findings.isEmpty() ? "-" : 
+                (criticalCount > 0 ? "🔴 " + criticalCount : String.valueOf(findings.size()));
+            
+            FileData data = new FileData(fileName, url, content, size, "", findings, endpoints);
+            allFiles.add(data);
+            
+            filesModel.addRow(new Object[]{fileName, url, size + " B", findingSummary, severity});
+            
+            // Añadir secretos a tabla
+            for (SecretDetector.Finding f : findings) {
+                String preview = f.value.length() > 40 ? f.value.substring(0, 40) + "..." : f.value;
+                secretsModel.addRow(new Object[]{
+                    SecretDetector.getSeverityIcon(f.severity) + " " + f.severity,
+                    f.type, fileName, f.lineNumber, preview
+                });
+            }
+            
+            // Añadir endpoints
+            for (String ep : endpoints) {
+                endpointsModel.addRow(new Object[]{ep, fileName});
+            }
+            
+            statusLabel.setText("Archivos: " + allFiles.size() + " | Secretos: " + secretsModel.getRowCount() + 
+                              " | Endpoints: " + endpointsModel.getRowCount());
+            
+            if (!findings.isEmpty() && api != null) {
+                api.logging().logToOutput("[SECRETO] " + fileName + " - " + findings.get(0).type);
+            }
+        });
+    }
+
+    private void filterFiles() {
+        String search = searchField.getText().toLowerCase().trim();
+        filesModel.setRowCount(0);
+        
+        for (FileData data : allFiles) {
+            if (search.isEmpty() || 
+                data.fileName.toLowerCase().contains(search) ||
+                data.url.toLowerCase().contains(search) ||
+                data.content.toLowerCase().contains(search)) {
+                
+                int criticalCount = 0;
+                for (SecretDetector.Finding f : data.findings) {
+                    if (f.severity == SecretDetector.Severity.CRITICAL) criticalCount++;
+                }
+                String findingSummary = data.findings.isEmpty() ? "-" : 
+                    (criticalCount > 0 ? "🔴 " + criticalCount : String.valueOf(data.findings.size()));
+                String severity = data.findings.isEmpty() ? "-" : data.findings.get(0).severity.toString();
+                
+                filesModel.addRow(new Object[]{data.fileName, data.url, data.size + " B", findingSummary, severity});
+            }
+        }
+    }
+
+    private void exportReport() {
+        if (allFiles.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No hay archivos para exportar", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new File("bugjs_report_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".json"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        
+        StringBuilder json = new StringBuilder();
+        json.append("{\n");
+        json.append("  \"generatedAt\": \"").append(new Date().toString()).append("\",\n");
+        json.append("  \"summary\": {\n");
+        json.append("    \"totalFiles\": ").append(allFiles.size()).append(",\n");
+        json.append("    \"totalSecrets\": ").append(secretsModel.getRowCount()).append(",\n");
+        json.append("    \"totalEndpoints\": ").append(endpointsModel.getRowCount()).append("\n");
+        json.append("  },\n");
+        json.append("  \"files\": [\n");
+        
+        for (int i = 0; i < allFiles.size(); i++) {
+            FileData d = allFiles.get(i);
+            json.append("    {\n");
+            json.append("      \"file\": \"").append(escapeJson(d.fileName)).append("\",\n");
+            json.append("      \"url\": \"").append(escapeJson(d.url)).append("\",\n");
+            json.append("      \"size\": ").append(d.size).append(",\n");
+            json.append("      \"findings\": [\n");
+            for (int j = 0; j < d.findings.size(); j++) {
+                SecretDetector.Finding f = d.findings.get(j);
+                json.append("        {\n");
+                json.append("          \"type\": \"").append(escapeJson(f.type)).append("\",\n");
+                json.append("          \"severity\": \"").append(f.severity).append("\",\n");
+                json.append("          \"line\": ").append(f.lineNumber).append("\n");
+                json.append("        }").append(j < d.findings.size() - 1 ? "," : "").append("\n");
+            }
+            json.append("      ],\n");
+            json.append("      \"endpoints\": [");
+            for (int j = 0; j < d.endpoints.size(); j++) {
+                json.append("\"").append(escapeJson(d.endpoints.get(j))).append("\"");
+                if (j < d.endpoints.size() - 1) json.append(", ");
+            }
+            json.append("]\n");
+            json.append("    }").append(i < allFiles.size() - 1 ? "," : "").append("\n");
+        }
+        json.append("  ]\n");
+        json.append("}");
+        
+        try {
+            Files.write(chooser.getSelectedFile().toPath(), json.toString().getBytes(StandardCharsets.UTF_8));
+            statusLabel.setText("Reporte exportado: " + chooser.getSelectedFile().getName());
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Error al exportar: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private String escapeJson(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+    }
+
+    private void sendSelectedToRepeater() {
+        int row = endpointsTable.getSelectedRow();
+        if (row < 0) {
+            JOptionPane.showMessageDialog(this, "Selecciona un endpoint primero");
+            return;
+        }
+        if (api == null) return;
+        
+        String endpoint = (String) endpointsModel.getValueAt(row, 0);
+        String fileName = (String) endpointsModel.getValueAt(row, 1);
+        
+        // Buscar URL base del archivo
+        String baseUrl = "";
+        for (FileData d : allFiles) {
+            if (d.fileName.equals(fileName)) {
+                baseUrl = d.url;
+                break;
+            }
+        }
+        
+        // Construir URL completa
+        String fullUrl = endpoint.startsWith("http") ? endpoint : 
+            (baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1) + endpoint.replaceFirst("^/", ""));
+        
+        HttpRequest request = HttpRequest.httpRequest().withUrl(fullUrl).withMethod("GET");
+        api.repeater().sendToRepeater(request);
+        statusLabel.setText("Enviado a Repeater: " + fullUrl);
+    }
+
+    private void openFileAtRow(int row) {
+        String folderPath = getSavePath();
+        if (folderPath.isEmpty()) return;
+        String fileName = (String) filesModel.getValueAt(row, 0);
+        File file = new File(folderPath, fileName);
+        if (!file.exists()) {
+            JOptionPane.showMessageDialog(this, "Archivo no encontrado", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        try {
+            if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(file);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void clearAllFiles() {
+        String folderPath = getSavePath();
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "¿Eliminar todos los archivos y datos?",
+            "Confirmar", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) return;
+        
+        int deleted = 0;
+        for (FileData d : allFiles) {
+            File f = new File(folderPath, d.fileName);
+            if (f.exists() && f.delete()) deleted++;
+        }
+        allFiles.clear();
+        filesModel.setRowCount(0);
+        secretsModel.setRowCount(0);
+        endpointsModel.setRowCount(0);
+        statusLabel.setText("Eliminados: " + deleted + " archivos");
+    }
+
+    public String getSavePath() { return pathField.getText(); }
+    public Set<String> getFilterWords() { return new HashSet<>(filterWords); }
+    public void setApi(MontoyaApi api) { this.api = api; }
+
+    private class SeverityRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable t, Object v, boolean sel, boolean focus, int r, int c) {
+            Component comp = super.getTableCellRendererComponent(t, v, sel, focus, r, c);
+            if (!sel) {
+                String sev = (String) t.getModel().getValueAt(r, 4);
+                if (sev != null) {
+                    if (sev.contains("CRITICAL")) comp.setBackground(new Color(255, 200, 200));
+                    else if (sev.contains("MEDIUM")) comp.setBackground(new Color(255, 240, 200));
+                    else if (sev.contains("LOW")) comp.setBackground(new Color(255, 255, 200));
+                    else comp.setBackground(Color.WHITE);
+                }
+                comp.setForeground(Color.BLACK);
+            }
+            return comp;
+        }
+    }
+}
