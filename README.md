@@ -1,4 +1,6 @@
-# bugjs - Extensión Bug Bounty para Burp Suite
+# BugJS - Extensión Bug Bounty para Burp Suite
+
+![BugJS Portada](media/portada.png)
 
 Extensión avanzada de Burp Suite diseñada para **Bug Bounty** que captura, analiza y extrae automáticamente información sensible de archivos JavaScript.
 
@@ -79,14 +81,18 @@ Genera reportes JSON con:
 - **Clic derecho**: Menú contextual con opciones
 
 #### 🔴 Secretos
+![Tab Secretos](media/secretos.png)
+
 - Lista todos los secretos detectados automáticamente
 - Ordenados por severidad (críticos primero)
 - Muestra: Tipo, Archivo, Línea, Vista previa
-- Resaltado en colores según severidad
+- Doble clic para abrir el archivo JS correspondiente
 
-#### 🌐 Endpoints  
+#### 🌐 Endpoints
+![Tab Endpoints](media/endpoints.png)
+
 - URLs de API y endpoints descubiertos
-- Botón **"Enviar a Repeater"** (copia URL al portapapeles)
+- Botón **"Enviar a Repeater"** para enviar directamente a Burp Repeater
 - Origen: archivo fuente donde se encontró
 
 ### Botones inferiores
@@ -120,6 +126,17 @@ La extensión detecta automáticamente:
 - Burp Suite (cualquier edición compatible con la API Montoya)
 - Maven (para compilar desde el código fuente)
 
+## Screenshots
+
+### Interfaz principal
+![Portada](media/portada.png)
+
+### Detección de secretos
+![Secretos](media/secretos.png)
+
+### Endpoints descubiertos
+![Endpoints](media/endpoints.png)
+
 ## Estructura del proyecto
 
 ```
@@ -129,10 +146,13 @@ burpsj/
 │   │   └── java/burpsj/burpsj/
 │   │       ├── JsSaver.java          # Punto de entrada de la extensión
 │   │       ├── JsHandler.java        # Manejador de tráfico HTTP
-│   │       └── MySettingsPanel.java    # Interfaz de usuario
+│   │       ├── MySettingsPanel.java  # Interfaz de usuario
+│   │       └── SecretDetector.java   # Detector de secretos
 │   └── test/
 │       └── java/burpsj/burpsj/
 │           └── AppTest.java
+├── .github/workflows/                 # GitHub Actions CI/CD
+├── media/                             # Imágenes y screenshots
 ├── pom.xml                           # Configuración de Maven
 └── README.md                         # Este archivo
 ```
@@ -141,6 +161,22 @@ burpsj/
 
 Proyecto de código abierto para uso personal y educativo.
 
+## CI/CD - GitHub Actions
+
+El proyecto incluye workflows automáticos:
+
+- **Build**: Compila en cada push a `main`
+- **Release**: Crea releases automáticas cuando se crea un tag `v*`
+
+Para crear una release:
+```bash
+git tag -a v1.0.0 -m "BugJS v1.0.0"
+git push origin v1.0.0
+```
+
 ## Autor
 
 Desarrollado para facilitar el análisis de archivos JavaScript en pruebas de seguridad web.
+
+---
+⭐ Si te es útil, dale una estrella al repo

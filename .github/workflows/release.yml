@@ -1,0 +1,78 @@
+name: Build and Release BugJS
+
+on:
+  push:
+    tags:
+      - 'v*'  # Se ejecuta cuando creas un tag tipo v1.0.0, v1.1.0, etc.
+  workflow_dispatch:  # Permite ejecutar manualmente desde GitHub
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Cache Maven dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
+    - name: Build with Maven
+      run: mvn clean package -DskipTests
+      
+    - name: Get version from pom.xml
+      id: get_version
+      run: |
+        VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: BugJS ${{ env.VERSION }}
+        body: |
+          ## BugJS Burp Suite Extension v${{ env.VERSION }}
+          
+          ### Instalación
+          1. Descarga el archivo `bugjs-${{ env.VERSION }}-jar-with-dependencies.jar`
+          2. En Burp Suite: **Extensions → Installed → Add**
+          3. Selecciona **Extension type: Java**
+          4. Carga el JAR descargado
+          
+          ### Características
+          - 🔴 Detección automática de 50+ tipos de secretos (API keys, tokens, credenciales)
+          - 🌐 Extracción de endpoints y APIs
+          - 📊 Exportación de reportes JSON
+          - 🔍 Filtros personalizados
+          - 🗺️ Soporte para Source Maps
+          
+          ### Requisitos
+          - Java 17+
+          - Burp Suite (cualquier edición con API Montoya)
+        draft: false
+        prerelease: false
+        
+    - name: Upload JAR to Release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./target/bugjs-${{ env.VERSION }}-jar-with-dependencies.jar
+        asset_name: bugjs-${{ env.VERSION }}.jar
+        asset_content_type: application/java-archive
