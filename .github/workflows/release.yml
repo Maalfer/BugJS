@@ -7,6 +7,9 @@ on:
       - master
   workflow_dispatch:  # Permite ejecutar manualmente desde GitHub
 
+permissions:
+  contents: write  # Necesario para crear releases
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -40,14 +43,11 @@ jobs:
         echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release and Upload JAR
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: build-${{ github.run_number }}-${{ env.SHORT_SHA }}
-        release_name: BugJS ${{ env.VERSION }} - Build ${{ github.run_number }}
+        name: BugJS ${{ env.VERSION }} - Build ${{ github.run_number }}
         body: |
           ## BugJS Burp Suite Extension v${{ env.VERSION }}
           
@@ -56,7 +56,7 @@ jobs:
           **Autor:** ${{ github.event.head_commit.author.name }}
           
           ### Instalación
-          1. Descarga el archivo `bugjs-${{ env.VERSION }}.jar`
+          1. Descarga el archivo `bugjs-${{ env.VERSION }}.jar` abajo 👇
           2. En Burp Suite: **Extensions → Installed → Add**
           3. Selecciona **Extension type: Java**
           4. Carga el JAR descargado
@@ -76,13 +76,7 @@ jobs:
           ${{ github.event.head_commit.message }}
         draft: false
         prerelease: false
-        
-    - name: Upload JAR to Release
-      uses: actions/upload-release-asset@v1
+        files: |
+          target/bugjs-${{ env.VERSION }}-jar-with-dependencies.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./target/bugjs-${{ env.VERSION }}-jar-with-dependencies.jar
-        asset_name: bugjs-${{ env.VERSION }}.jar
-        asset_content_type: application/java-archive
